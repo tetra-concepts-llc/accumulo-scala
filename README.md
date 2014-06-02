@@ -8,8 +8,8 @@ Accumulo-Scala is a light wrapper to provide a fluent api for reading data from 
 
 ## Usage
 1. import com.tetra.accumulo_scala.ConnectorOps._
-2. ???
-3. Profit
+2. val connector = instance.getConnector(user, passwordToken)
+3. scan ...
 
 ## Examples
 scan table 'abc' from 'a' to 'z'
@@ -42,7 +42,10 @@ connector scan "abc" filter "f:q" foreach { e =>
 * com.tetra.accumulo_scala.fq.delim      (DEFAULT: ':')
 * com.tetra.accumulo_scala.strict        (DEFAULT: false)
 
-## FAQ (sort of, nobody actually asked any questions yet ...)
+## FAQ (sort of ...)
+### How many people actually asked any of these questions?
+zero
+
 ### What if I want to use a BatchScanner?
 Then you can ask for a parallel implementation using par.
 

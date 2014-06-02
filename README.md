@@ -76,6 +76,34 @@ connector scan "data" in (connector scan "index" from "a" to "b" map(...)) forea
 }
 `
 
+### Can this be used from Java?
+I guess ... if you really want to ...
+
+> Connector connector = instance.getConnector("", new PasswordToken());
+
+>ConnectorOps conn = new ConnectorOps(connector);
+
+>CloseableIterator<Entry<Key, Value>> ci = conn.scan("abc").from(new Key("a")).to(new Key("b"));
+
+>try {
+
+>  Entry<Key, Value> e;
+
+>  while(ci.hasNext()) {
+
+>    e = ci.next();
+
+>    //do something
+
+>  }
+
+>} finally {
+
+>  ci.close();
+
+>}
+
+
 ## License
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0.html)
 

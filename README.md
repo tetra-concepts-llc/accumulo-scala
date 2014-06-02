@@ -38,8 +38,8 @@ connector scan "abc" filter "f:q" foreach { e =>
 
 ## Settings
 * com.tetra.accumulo_scala.auths         (DEFAULT: Auths.Empty)
-* com.tetra.accumulo_scala.auths.delim   (DEFAULT: ,)
-* com.tetra.accumulo_scala.fq.delim      (DEFAULT: :)
+* com.tetra.accumulo_scala.auths.delim   (DEFAULT: ',')
+* com.tetra.accumulo_scala.fq.delim      (DEFAULT: ':')
 * com.tetra.accumulo_scala.strict        (DEFAULT: false)
 
 ## FAQ (sort of, nobody actually asked any questions yet ...)
@@ -68,7 +68,9 @@ scan table 'abc' drop 10 foreach { e => ... }
 Ask and you shall receive!
 
 `
-connector scan "data" in (connector scan "index" from "a" to "b" map { e => ... }) foreach { e => ... }
+connector scan "data" in (connector scan "index" from "a" to "b" map(...)) foreach { e => 
+  ... 
+}
 `
 
 ## License

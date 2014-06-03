@@ -42,6 +42,10 @@ import org.apache.accumulo.core.data.Range
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.apache.hadoop.io.Text
+import java.util.Map.Entry
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.client.BatchScanner
 
 @RunWith(classOf[JUnitRunner])
 class BatchScannerProxySpec extends UnitSpec {
@@ -98,7 +102,7 @@ class BatchScannerProxySpec extends UnitSpec {
 
     assert(!scanner.hasNext)
   }
-  
+
   it should "do a full table scan if no range parameters are set" in {
     val f = fixture
     val bsp = new BatchScannerProxy(f.conf, 2, List(new Range()).iterator)
@@ -126,7 +130,7 @@ class BatchScannerProxySpec extends UnitSpec {
 
     assert("az" == bsp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "used both ranges and to and from" in {
     val f = fixture
     val bsp = new BatchScannerProxy(f.conf, 2, List(new AccumuloRange("a"), new AccumuloRange("z"), new AccumuloRange("b", "y")).iterator)
@@ -154,10 +158,10 @@ class BatchScannerProxySpec extends UnitSpec {
 
     assert(1 == bsp.drop(3).foldLeft(0)((count, _) => count + 1))
   }
-  
+
   it should "everything if we have the auths" in {
     val f = fixture
-    f.conf =  new ScannerProxyConfig {
+    f.conf = new ScannerProxyConfig {
       override val conn = f.conf.conn
       override val auths = Auths.getAuths("hidden")
       override val tableName = f.conf.tableName
@@ -166,15 +170,15 @@ class BatchScannerProxySpec extends UnitSpec {
 
     assert(5 == bsp.foldLeft(0)((count, _) => count + 1))
   }
-  
-    it should "get only kk if filtering on family fk" in {
+
+  it should "get only kk if filtering on family fk" in {
     val f = fixture
     f.conf.familyQualifiers = Some(List((new Text("fk"), null)))
     val bsp = new BatchScannerProxy(f.conf, 2, List(new Range()).iterator)
 
     assert("kk" == bsp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "get only k if filtering on family fk qualifier qk2" in {
     val f = fixture
     f.conf.familyQualifiers = Some(List((new Text("fk"), new Text("qk2"))))
@@ -182,19 +186,94 @@ class BatchScannerProxySpec extends UnitSpec {
 
     assert("k" == bsp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "close the ranges when it closes" in {
     val ranges = mock[CloseableIterator[Range]]
-    
+
     expecting {
       ranges.close
     }
-    
+
     val bsp = new ScannerProxy(null, null, null);
     bsp.in(ranges)
-    
+
     whenExecuting(ranges) {
       bsp.close
+    }
+  }
+
+  it should "close the ranges when it throws an exception during hasNext" in {
+    val conn = mock[Connector]
+    val scanner = mock[BatchScanner]
+    val iter = mock[Iterator[Entry[Key, Value]]]
+
+    //FIXME: how do I mock a GroupedIterator?
+    val ranges = new CloseableIterator[Range] {
+      val i = List(new Range()).iterator
+      var closed = false
+
+      def hasNext() = i.hasNext
+      def next() = i.next
+      def close() = {
+        closed = true
+      }
+    }
+
+    expecting {
+      conn.createBatchScanner(anyString(), anyObject(), anyObject()).andReturn(scanner)
+      scanner.setRanges(anyObject())
+      scanner.iterator().andReturn(iter)
+      iter.hasNext().andThrow(new RuntimeException)
+    }
+
+    val proxy = new ScannerProxy(conn, Auths.EMPTY, "abc")
+    val sp = new BatchScannerProxy(proxy, 2, ranges)
+
+    whenExecuting(conn, scanner, iter) {
+      try {
+        sp.hasNext
+      } catch {
+        case t: Throwable => {
+          assert(ranges.closed)
+        }
+      }
+    }
+  }
+
+  it should "close the ranges when it throws an exception during next" in {
+    val conn = mock[Connector]
+    val scanner = mock[BatchScanner]
+    val iter = mock[Iterator[Entry[Key, Value]]]
+
+    //FIXME: how do I mock a GroupedIterator?
+    val ranges = new CloseableIterator[Range] {
+      val i = List(new Range()).iterator
+      var closed = false
+
+      def hasNext() = i.hasNext
+      def next() = i.next
+      def close() = { closed = true }
+    }
+
+    expecting {
+      conn.createBatchScanner(anyString(), anyObject(), anyObject()).andReturn(scanner)
+      scanner.setRanges(anyObject())
+      scanner.iterator().andReturn(iter)
+      iter.hasNext().andReturn(true).anyTimes()
+      iter.next().andThrow(new RuntimeException)
+    }
+
+    val proxy = new ScannerProxy(conn, Auths.EMPTY, "abc")
+    val sp = new BatchScannerProxy(proxy, 2, ranges)
+
+    whenExecuting(conn, scanner, iter) {
+      try {
+        sp.next
+      } catch {
+        case t: Throwable => {
+          assert(ranges.closed)
+        }
+      }
     }
   }
 }

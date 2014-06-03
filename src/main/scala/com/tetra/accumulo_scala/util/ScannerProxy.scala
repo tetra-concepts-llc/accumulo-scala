@@ -26,6 +26,7 @@ package com.tetra.accumulo_scala.util
 import java.util.Map.Entry
 import scala.collection.JavaConversions._
 import org.apache.accumulo.core.client.{ Connector => AccumuloConnector }
+import org.apache.accumulo.core.client.{Scanner => AccumuloScanner}
 import org.apache.accumulo.core.data.{ Key => AccumuloKey }
 import org.apache.accumulo.core.data.{ Range => AccumuloRange }
 import org.apache.accumulo.core.data.{ Value => AccumuloValue }
@@ -37,13 +38,13 @@ import org.apache.commons.logging.LogFactory
 
 /**
  * Provides the DSL to scan an Accumulo table
- * 
+ *
  * Uses System Property com.tetra.accumulo_scala.fq.delim to split a family from a qualifier when filtering
  */
 class ScannerProxy(override val conn: AccumuloConnector, override val auths: AccumuloAuthorizations, override val tableName: String) extends CloseableIterator[Entry[AccumuloKey, AccumuloValue]] with ScannerProxyConfig {
   private val LOG = LogFactory.getLog(classOf[ScannerProxy])
   private val FQ_DELIM = System.getProperty("com.tetra.accumulo_scala.fq.delim", ":")
-  
+
   private var doTableScan = true
   private var scanning = false
   private var closed = false
@@ -150,49 +151,56 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
 
     if (closed) return false
 
-    if (iter.hasNext) return true
-
     try {
-      if (doTableScan) {
-        doTableScan = false //only do once
+      if (iter.hasNext) return true
 
-        val scanner = getScanner
-        iter = scanner.iterator()
-        return iter.hasNext
+      try {
+        if (doTableScan) {
+          doTableScan = false //only do once
+
+          val scanner = getScanner
+          iter = scanner.iterator()
+          return iter.hasNext
+        }
+
+        if (toKey.isDefined || fromKey.isDefined) {
+          val start = fromKey.getOrElse(null)
+          val end = toKey.getOrElse(null)
+
+          toKey = None
+          fromKey = None
+
+          val scanner = getScanner
+          scanner.setRange(new AccumuloRange(start, end))
+          iter = scanner.iterator()
+          if (iter.hasNext) return true
+        }
+
+        while (!iter.hasNext && ranges.getOrElse(CloseableIterator.empty).hasNext) {
+          val scanner = getScanner
+          scanner.setRange(ranges.get.next)
+          iter = scanner.iterator()
+        }
+      } catch {
+        case tnfe: TableNotFoundException => {
+          LOG.error(tnfe)
+          close
+          if (isStrict) throw tnfe
+        }
+        case e: Exception => {
+          LOG.error(e)
+          close
+          if (isStrict) throw e
+        }
       }
 
-      if (toKey.isDefined || fromKey.isDefined) {
-        val start = fromKey.getOrElse(null)
-        val end = toKey.getOrElse(null)
-
-        toKey = None
-        fromKey = None
-
-        val scanner = getScanner
-        scanner.setRange(new AccumuloRange(start, end))
-        iter = scanner.iterator()
-        if (iter.hasNext) return true
-      }
-
-      while (!iter.hasNext && ranges.getOrElse(CloseableIterator.empty).hasNext) {
-        val scanner = getScanner
-        scanner.setRange(ranges.get.next)
-        iter = scanner.iterator()
-      }
+      if (iter.hasNext) return true
     } catch {
-      case tnfe: TableNotFoundException => {
-        LOG.error(tnfe)
+      case t: Throwable => {
         close
-        if (isStrict) throw tnfe
-      }
-      case e: Exception => {
-        LOG.error(e)
-        close
-        if (isStrict) throw e
+        throw t
       }
     }
-
-    if (iter.hasNext) return true
 
     close()
     return false
@@ -204,9 +212,16 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
   override def next(): Entry[AccumuloKey, AccumuloValue] = {
     scanning = true
 
-    if (!hasNext) Iterator.empty.next
+    try {
+      if (!hasNext) Iterator.empty.next
 
-    iter.next
+      iter.next
+    } catch {
+      case t: Throwable => {
+        close
+        throw t
+      }
+    }
   }
 
   /**
@@ -218,7 +233,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
     ranges.getOrElse(CloseableIterator.empty).close
   }
 
-  private def getScanner: org.apache.accumulo.core.client.Scanner = {
+  private def getScanner: AccumuloScanner = {
     val scanner = conn.createScanner(tableName, auths)
 
     if (familyQualifiers.isDefined) {

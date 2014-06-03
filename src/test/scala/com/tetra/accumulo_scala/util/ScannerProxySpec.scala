@@ -41,6 +41,11 @@ import org.apache.accumulo.core.security.ColumnVisibility
 import org.apache.accumulo.core.data.Range
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import java.util.Iterator
+import java.util.Map.Entry
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
+import java.lang.Throwable
 
 @RunWith(classOf[JUnitRunner])
 class ScannerProxySpec extends UnitSpec {
@@ -114,7 +119,7 @@ class ScannerProxySpec extends UnitSpec {
 
     assert("az" == sp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "used both ranges and to and from" in {
     val f = fixture
     val sp = new ScannerProxy(f.conn, Auths.EMPTY, f.tableName)
@@ -144,7 +149,7 @@ class ScannerProxySpec extends UnitSpec {
 
     assert("z" == sp.drop(3).foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "get only kk if filtering on family fk" in {
     val f = fixture
     val sp = new ScannerProxy(f.conn, Auths.EMPTY, f.tableName)
@@ -152,7 +157,7 @@ class ScannerProxySpec extends UnitSpec {
 
     assert("kk" == sp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "get only k if filtering on family fk qualifier qk2" in {
     val f = fixture
     val sp = new ScannerProxy(f.conn, Auths.EMPTY, f.tableName)
@@ -160,26 +165,83 @@ class ScannerProxySpec extends UnitSpec {
 
     assert("k" == sp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "everything if we have the auths" in {
     val f = fixture
     val sp = new ScannerProxy(f.conn, Auths.getAuths("hidden"), f.tableName)
 
     assert("ahkkz" == sp.foldLeft("")((rows, e) => rows + e.getKey().getRow().toString()))
   }
-  
+
   it should "close the ranges when it closes" in {
     val ranges = mock[CloseableIterator[Range]]
-    
+
     expecting {
       ranges.close
     }
-    
-    val sp = new ScannerProxy(null, null, null);
+
+    val sp = new ScannerProxy(null, null, null)
     sp.in(ranges)
-    
+
     whenExecuting(ranges) {
       sp.close
+    }
+  }
+
+  it should "close the ranges when it throws an exception during hasNext" in {
+    val conn = mock[Connector]
+    val scanner = mock[Scanner]
+    val iter = mock[Iterator[Entry[Key, Value]]]
+    val ranges = mock[CloseableIterator[Range]]
+
+    expecting {
+      conn.createScanner(anyString(), anyObject()).andReturn(scanner)
+      scanner.setRange(anyObject())
+      scanner.iterator().andReturn(iter)
+      iter.hasNext().andThrow(new RuntimeException).anyTimes
+      ranges.hasNext().andReturn(true)
+      ranges.next().andReturn(new Range)
+      ranges.close.anyTimes()
+    }
+
+    val sp = new ScannerProxy(conn, Auths.EMPTY, "abc")
+    sp.in(ranges)
+
+    whenExecuting(conn, scanner, iter, ranges) {
+      try {
+        sp.hasNext
+      } catch {
+        case t: Throwable => { /*pass*/ }
+      }
+    }
+  }
+
+  it should "close the ranges when it throws an exception during next" in {
+    val conn = mock[Connector]
+    val scanner = mock[Scanner]
+    val iter = mock[Iterator[Entry[Key, Value]]]
+    val ranges = mock[CloseableIterator[Range]]
+
+    expecting {
+      conn.createScanner(anyString(), anyObject()).andReturn(scanner)
+      scanner.setRange(anyObject())
+      scanner.iterator().andReturn(iter)
+      iter.hasNext().andReturn(true).anyTimes()
+      iter.next().andThrow(new RuntimeException)
+      ranges.hasNext().andReturn(true)
+      ranges.next().andReturn(new Range)
+      ranges.close.anyTimes()
+    }
+
+    val sp = new ScannerProxy(conn, Auths.EMPTY, "xyz")
+    sp.in(ranges)
+
+    whenExecuting(conn, scanner, iter, ranges) {
+      try {
+        sp.next
+      } catch {
+        case t: Throwable => { /*pass*/ }
+      }
     }
   }
 }

@@ -125,12 +125,16 @@ class BatchScannerProxy(config: ScannerProxyConfig, numQueryThreads: Int, ranges
   override def close(): Unit = {
     closed = true
 
+    closeQuietly(batchScanner)
+    IOUtils.closeQuietly(ranges)
+  }
+  
+  private def closeQuietly(_batchScanner: BatchScanner): Unit = {
     try {
-      batchScanner.close()
+      _batchScanner.close()
     } catch {
       case _: Throwable => { /*shh*/ }
     }
-    IOUtils.closeQuietly(ranges)
   }
 }
 

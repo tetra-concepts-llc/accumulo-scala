@@ -39,7 +39,7 @@ import org.apache.hadoop.io.Text
 import org.apache.commons.io.IOUtils
 
 /**
- * Use a BatchScanner
+ * Use a BatchScanner to get the info from accumulo
  */
 class BatchScannerProxy(config: ScannerProxyConfig, numQueryThreads: Int, ranges: CloseableIterator[AccumuloRange]) extends CloseableIterator[Entry[AccumuloKey, AccumuloValue]] {
   private val LOG = LogFactory.getLog(classOf[BatchScannerProxy])
@@ -100,7 +100,7 @@ class BatchScannerProxy(config: ScannerProxyConfig, numQueryThreads: Int, ranges
     }
 
     close()
-    return false
+    false
   }
 
   /**
@@ -123,12 +123,17 @@ class BatchScannerProxy(config: ScannerProxyConfig, numQueryThreads: Int, ranges
    * {@inheritDoc}
    */
   override def close(): Unit = {
+    if(!closed) {
+    	closeQuietly(batchScanner)
+    	IOUtils.closeQuietly(ranges)
+    }
+    
     closed = true
-
-    closeQuietly(batchScanner)
-    IOUtils.closeQuietly(ranges)
   }
   
+  /*
+   * if only the batchScanner was just closeable ...
+   */
   private def closeQuietly(_batchScanner: BatchScanner): Unit = {
     try {
       _batchScanner.close()

@@ -54,7 +54,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * Key to start scanning from
    */
   def from(f: AccumuloKey): ScannerProxy = {
-    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    checkCanConfigure
 
     fromKey = Some(f)
     doTableScan = false
@@ -66,7 +66,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * Key to scan to
    */
   def to(t: AccumuloKey): ScannerProxy = {
-    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    checkCanConfigure
 
     toKey = Some(t)
     doTableScan = false
@@ -85,7 +85,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * Ranges to scan
    */
   def in(r: CloseableIterator[AccumuloRange]): ScannerProxy = {
-    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    checkCanConfigure
 
     ranges = Some(r)
     doTableScan = false
@@ -97,6 +97,8 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * Restrict the scan to only certain families/qualifiers
    */
   def filter(fqs: String*): ScannerProxy = {
+    checkCanConfigure
+    
     val f = { s: String =>
       if (s.contains(FQ_DELIM)) {
         val parts = s.split(FQ_DELIM)
@@ -114,7 +116,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * and an empty iterator will be returned
    */
   def strict(flag: Boolean): ScannerProxy = {
-    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    checkCanConfigure
 
     isStrict = flag
     this
@@ -124,7 +126,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
    * Use a parallelized version of a Scanner
    */
   def par(numQueryThreads: Int): BatchScannerProxy = {
-    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    checkCanConfigure
 
     var batchRanges: CloseableIterator[AccumuloRange] = CloseableIterator.empty
 
@@ -146,6 +148,7 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
   /**
    * {@inheritDoc}
    */
+  //TODO: simplify
   override def hasNext(): Boolean = {
     scanning = true
 
@@ -247,5 +250,10 @@ class ScannerProxy(override val conn: AccumuloConnector, override val auths: Acc
     }
 
     scanner
+  }
+  
+  private def checkCanConfigure: Unit = {
+    if (scanning) throw new IllegalArgumentException("already started scanning, can't configure now!")
+    if (closed) throw new IllegalArgumentException("already closed, can't configure now!")
   }
 }

@@ -66,9 +66,13 @@ Ask and you shall receive!
       ... 
     }
 
+### Is there an easy way to see count how many entries are in my results?
+Sure is!
+
+    connector.scan("abc").foldLeft(0)((count,_) => count+1)
 
 ### Can this be used from Java?
-I guess ... if you really want to ...
+I guess, if you really want to ...
 
     Connector connector = instance.getConnector("", new PasswordToken());
     ConnectorOps conn = new ConnectorOps(connector);
